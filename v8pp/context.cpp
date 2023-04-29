@@ -9,16 +9,6 @@
 #include <fstream>
 #include <utility>
 
-#if defined(WIN32)
-#define VC_EXTRALEAN
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
-static char const path_sep = '\\';
-#else
-#include <dlfcn.h>
-static char const path_sep = '/';
-#endif
-
 namespace v8pp {
 
 struct context::dynamic_module
@@ -29,80 +19,6 @@ struct context::dynamic_module
 
 void context::load_module(v8::FunctionCallbackInfo<v8::Value> const& args)
 {
-	v8::Isolate* isolate = args.GetIsolate();
-
-	v8::EscapableHandleScope scope(isolate);
-	v8::Local<v8::Value> result;
-	try
-	{
-		std::string const name = from_v8<std::string>(isolate, args[0], "");
-		if (name.empty())
-		{
-			throw std::runtime_error("load_module: require module name string argument");
-		}
-
-		context* ctx = detail::external_data::get<context*>(args.Data());
-
-		// check if module is already loaded
-		const auto it = ctx->modules_.find(name);
-		if (it != ctx->modules_.end())
-		{
-			result = v8::Local<v8::Value>::New(isolate, it->second.exports);
-		}
-		else
-		{
-			std::string filename = name;
-			if (!ctx->lib_path_.empty())
-			{
-				filename = ctx->lib_path_ + path_sep + name;
-			}
-			std::string const suffix = V8PP_PLUGIN_SUFFIX;
-			if (filename.size() >= suffix.size()
-				&& filename.compare(filename.size() - suffix.size(), suffix.size(), suffix) != 0)
-			{
-				filename += suffix;
-			}
-
-			dynamic_module module;
-#if defined(WIN32)
-			UINT const prev_error_mode = SetErrorMode(SEM_NOOPENFILEERRORBOX);
-			module.handle = LoadLibraryA(filename.c_str());
-			::SetErrorMode(prev_error_mode);
-#else
-			module.handle = dlopen(filename.c_str(), RTLD_LAZY);
-#endif
-
-			if (!module.handle)
-			{
-				throw std::runtime_error("load_module(" + name
-					+ "): could not load shared library " + filename);
-			}
-#if defined(WIN32)
-			void* sym = ::GetProcAddress((HMODULE)module.handle,
-				V8PP_STRINGIZE(V8PP_PLUGIN_INIT_PROC_NAME));
-#else
-			void* sym = dlsym(module.handle, V8PP_STRINGIZE(V8PP_PLUGIN_INIT_PROC_NAME));
-#endif
-			if (!sym)
-			{
-				throw std::runtime_error("load_module(" + name
-					+ "): initialization function "
-					V8PP_STRINGIZE(V8PP_PLUGIN_INIT_PROC_NAME)
-					" not found in " + filename);
-			}
-
-			using module_init_proc = v8::Local<v8::Value> (*)(v8::Isolate*);
-			module_init_proc init_proc = reinterpret_cast<module_init_proc>(sym);
-			result = init_proc(isolate);
-			module.exports.Reset(isolate, result);
-			ctx->modules_.emplace(name, std::move(module));
-		}
-	}
-	catch (std::exception const& ex)
-	{
-		result = throw_ex(isolate, ex.what());
-	}
-	args.GetReturnValue().Set(scope.Escape(result));
 }
 
 void context::run_file(v8::FunctionCallbackInfo<v8::Value> const& args)
@@ -232,21 +148,6 @@ void context::destroy()
 
 	// remove all class singletons and external data before modules unload
 	cleanup(isolate_);
-
-	for (auto& kv : modules_)
-	{
-		dynamic_module& module = kv.second;
-		module.exports.Reset();
-		if (module.handle)
-		{
-#if defined(WIN32)
-			::FreeLibrary((HMODULE)module.handle);
-#else
-			dlclose(module.handle);
-#endif
-		}
-	}
-	modules_.clear();
 
 	if (enter_context_)
 	{

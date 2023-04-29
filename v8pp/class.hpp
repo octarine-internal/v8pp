@@ -337,7 +337,7 @@ public:
 		v8::Local<v8::String> v8_name = v8pp::to_v8(isolate(), name);
 		v8::Local<v8::Value> data = detail::external_data::set(isolate(), property_type(std::move(get), std::move(set)));
 		class_info_.class_function_template()->PrototypeTemplate()
-			->SetAccessor(v8_name, getter, setter, data, v8::DEFAULT, v8::PropertyAttribute(v8::DontDelete));
+			->SetAccessor(v8_name, getter, setter, data, v8::DEFAULT, v8::PropertyAttribute(v8::DontDelete), v8::SideEffectType::kHasNoSideEffect);
 		return *this;
 	}
 

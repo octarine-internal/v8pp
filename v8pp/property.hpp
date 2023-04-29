@@ -127,6 +127,10 @@ try
 	else
 	{
 		auto obj = v8pp::class_<GetClass, Traits>::unwrap_object(info.GetIsolate(), info.This());
+		if (!obj)
+		{
+			throw std::runtime_error("property getter on null instance");
+		}
 		property_get(property.getter, name, info, *obj);
 	}
 }
@@ -151,6 +155,10 @@ try
 	else
 	{
 		auto obj = v8pp::class_<SetClass, Traits>::unwrap_object(info.GetIsolate(), info.This());
+		if (!obj)
+		{
+			throw std::runtime_error("property setter on null instance");
+		}
 		property_set(property.setter, name, value, info, *obj);
 	}
 }

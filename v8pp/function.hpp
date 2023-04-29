@@ -16,10 +16,14 @@ class external_data
 {
 public:
 	//TODO: allow non-capturing lambdas
+#ifndef _DEBUG
 	template<typename T>
 	static constexpr bool is_bitcast_allowed = sizeof(T) <= sizeof(void*) &&
-		std::is_default_constructible_v<T> &&
-		std::is_trivially_copyable_v<T>;
+		std::is_default_constructible_v<T>&& std::is_trivially_copyable_v<T>;
+#else
+	template<typename T>
+	static constexpr bool is_bitcast_allowed = false;
+#endif
 
 	template<typename T>
 	static v8::Local<v8::Value> set(v8::Isolate* isolate, T&& value)
@@ -56,15 +60,7 @@ public:
 		}
 	}
 
-	static void destroy_all(v8::Isolate* isolate)
-	{
-		handle_visitor visitor(isolate);
-		isolate->VisitHandlesWithClassIds(&visitor);
-	}
-
 private:
-	static constexpr uint16_t class_id = 0x7bc;
-
 	struct value_holder_base
 	{
 		virtual ~value_holder_base() = default;
@@ -82,7 +78,6 @@ private:
 		{
 			new (&storage) T(std::forward<T>(data));
 			pext.Reset(isolate, v8::External::New(isolate, this));
-			pext.SetWrapperClassId(external_data::class_id);
 			pext.SetWeak(this,
 				[](v8::WeakCallbackInfo<value_holder> const& info)
 				{
@@ -96,29 +91,6 @@ private:
 			{
 				data().~T();
 				pext.Reset();
-			}
-		}
-	};
-
-	struct handle_visitor final : v8::PersistentHandleVisitor
-	{
-		v8::Isolate* isolate;
-
-		explicit handle_visitor(v8::Isolate* isolate)
-			: isolate(isolate)
-		{
-		}
-
-		virtual void VisitPersistentHandle(v8::Persistent<v8::Value>* value, uint16_t value_class_id) override
-		{
-			if (value_class_id == external_data::class_id)
-			{
-				v8::HandleScope scope(isolate);
-				v8::Local<v8::External> ext = value->Get(isolate).As<v8::External>();
-				if (!ext.IsEmpty())
-				{
-					delete static_cast<value_holder_base*>(ext->Value());
-				}
 			}
 		}
 	};
