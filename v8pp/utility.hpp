@@ -336,25 +336,40 @@ using is_callable = std::integral_constant<bool,
 class type_info
 {
 public:
+#ifdef _DEBUG
 	constexpr std::string_view name() const { return name_; }
+#endif
 	constexpr bool operator==(type_info const& other) const { return name_ == other.name_; }
 	constexpr bool operator!=(type_info const& other) const { return name_ != other.name_; }
 
 private:
-	template<typename T> constexpr friend type_info type_id();
+#ifdef _DEBUG
+	template<typename T> consteval friend type_info type_id();
+#else
+	template<typename T> inline friend type_info type_id();
+#endif
 
+#ifdef _DEBUG
 	constexpr explicit type_info(std::string_view name)
+#else
+	constexpr explicit type_info(uintptr_t name)
+#endif
 		: name_(name)
 	{
 	}
 
+#ifdef _DEBUG
 	std::string_view name_;
+#else
+	uintptr_t name_;
+#endif
 };
 
 /// Get type information for type T
 /// The idea is borrowed from https://github.com/Manu343726/ctti
 template<typename T>
-constexpr type_info type_id()
+#ifdef _DEBUG
+consteval type_info type_id()
 {
 #if defined(_MSC_VER) && !defined(__clang__)
 	std::string_view name = __FUNCSIG__;
@@ -388,6 +403,13 @@ constexpr type_info type_id()
 
 	return type_info(name);
 }
+#else
+inline type_info type_id()
+{
+	static bool s_Storage = false;
+	return type_info(reinterpret_cast<uintptr_t>(&s_Storage));
+}
+#endif
 
 }} // namespace v8pp::detail
 
