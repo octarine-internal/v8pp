@@ -81,10 +81,10 @@ public:
 		static_assert(!detail::is_callable<Variable>::value, "Variable must not be callable");
 		v8::HandleScope scope(isolate_);
 
-		obj_->SetAccessor(v8pp::to_v8(isolate_, name),
+		obj_->SetNativeDataProperty(v8pp::to_v8(isolate_, name),
 			&var_get<Variable>, &var_set<Variable>,
 			detail::external_data::set(isolate_, &var),
-			v8::DEFAULT, v8::PropertyAttribute(v8::DontDelete));
+			v8::PropertyAttribute(v8::DontDelete));
 		return *this;
 	}
 
@@ -103,11 +103,11 @@ public:
 		v8::HandleScope scope(isolate_);
 
 		using Traits = detail::none;
-		v8::AccessorGetterCallback getter = property_type::template get<Traits>;
-		v8::AccessorSetterCallback setter = property_type::is_readonly ? nullptr : property_type::template set<Traits>;
+		v8::AccessorNameGetterCallback getter = property_type::template get<Traits>;
+		v8::AccessorNameSetterCallback setter = property_type::is_readonly ? nullptr : property_type::template set<Traits>;
 		v8::Local<v8::String> v8_name = v8pp::to_v8(isolate_, name);
 		v8::Local<v8::Value> data = detail::external_data::set(isolate_, property_type(std::move(get), std::move(set)));
-		obj_->SetAccessor(v8_name, getter, setter, data, v8::DEFAULT, v8::PropertyAttribute(v8::DontDelete));
+		obj_->SetNativeDataProperty(v8_name, getter, setter, data, v8::PropertyAttribute(v8::DontDelete));
 		return *this;
 	}
 

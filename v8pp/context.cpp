@@ -17,34 +17,6 @@ struct context::dynamic_module
 	v8::Global<v8::Value> exports;
 };
 
-void context::load_module(v8::FunctionCallbackInfo<v8::Value> const& args)
-{
-}
-
-void context::run_file(v8::FunctionCallbackInfo<v8::Value> const& args)
-{
-	v8::Isolate* isolate = args.GetIsolate();
-
-	v8::EscapableHandleScope scope(isolate);
-	v8::Local<v8::Value> result;
-	try
-	{
-		std::string const filename = from_v8<std::string>(isolate, args[0], "");
-		if (filename.empty())
-		{
-			throw std::runtime_error("run_file: require filename string argument");
-		}
-
-		context* ctx = detail::external_data::get<context*>(args.Data());
-		result = to_v8(isolate, ctx->run_file(filename));
-	}
-	catch (std::exception const& ex)
-	{
-		result = throw_ex(isolate, ex.what());
-	}
-	args.GetReturnValue().Set(scope.Escape(result));
-}
-
 struct array_buffer_allocator : v8::ArrayBuffer::Allocator
 {
 	void* Allocate(size_t length)
@@ -88,15 +60,6 @@ context::context(v8::Isolate* isolate, v8::ArrayBuffer::Allocator* allocator,
 	if (global.IsEmpty())
 	{
 		global = v8::ObjectTemplate::New(isolate_);
-	}
-
-	if (add_default_global_methods)
-	{
-		v8::Local<v8::Value> data = detail::external_data::set(isolate_, this);
-		global->Set(isolate_, "require",
-			v8::FunctionTemplate::New(isolate_, context::load_module, data));
-		global->Set(isolate_, "run",
-			v8::FunctionTemplate::New(isolate_, context::run_file, data));
 	}
 
 	v8::Local<v8::Context> impl = v8::Context::New(isolate_, nullptr, global);
@@ -173,41 +136,6 @@ context& context::value(std::string_view name, v8::Local<v8::Value> value)
 context& context::module(std::string_view name, v8pp::module& m)
 {
 	return value(name, m.new_instance());
-}
-
-v8::Local<v8::Value> context::run_file(std::string const& filename)
-{
-	std::ifstream stream(filename.c_str());
-	if (!stream)
-	{
-		throw std::runtime_error("could not locate file " + filename);
-	}
-
-	std::istreambuf_iterator<char> begin(stream), end;
-	return run_script(std::string(begin, end), filename);
-}
-
-v8::Local<v8::Value> context::run_script(std::string_view source, std::string_view filename)
-{
-	v8::EscapableHandleScope scope(isolate_);
-	v8::Local<v8::Context> context = isolate_->GetCurrentContext();
-#if V8_MAJOR_VERSION > 9 || (V8_MAJOR_VERSION == 9 && V8_MINOR_VERSION >= 7)
-	v8::ScriptOrigin origin(isolate_, to_v8(isolate_, filename));
-#else
-	v8::ScriptOrigin origin(to_v8(isolate_, filename));
-#endif
-	v8::Local<v8::Script> script;
-	bool const is_valid = v8::Script::Compile(context,
-		to_v8(isolate_, source), &origin).ToLocal(&script);
-	(void)is_valid;
-
-	v8::Local<v8::Value> result;
-	if (!script.IsEmpty())
-	{
-		bool const is_successful = script->Run(context).ToLocal(&result);
-		(void)is_successful;
-	}
-	return scope.Escape(result);
 }
 
 } // namespace v8pp
